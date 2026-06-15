@@ -1,0 +1,52 @@
+# Agent-PNSV
+> An AST-Driven Agentic GraphRAG Pipeline for Repository-Level Code Understanding
+
+`Agent-PNSV` is an advanced repository-level code analysis tool that moves past the limitations of traditional vector-based RAG. By combining Abstract Syntax Tree (AST) parsing with a hybrid Knowledge Graph+Vector architecture, Agent-PNSV map codebases by their *relationships* and *execution structures* rather than just keyword similarity.
+
+---
+
+## 💡 The Problem with Traditional Code RAG
+Traditional Retrieval-Augmented Generation treats source code like unstructured prose. Slicing source code by fixed character limits cuts structural logic in half, and semantic vector similarity frequently returns test suites or deprecated modules rather than core implementations. Furthermore, traditional RAG is blind to multi-file inheritance and call hierarchies.
+
+**Agent-PNSV solves this by treating code as a graph of interconnected dependencies.**
+
+## 🛠️ Key Innovations
+* **AST-Aware Parsing:** Leverages `Tree-sitter` to deterministically chunk code by structural boundaries (Functions, Classes, Structs).
+* **GraphRAG Architecture:** Links code blocks using relational dependencies (`CALLS`, `INHERITS_FROM`, `INCLUDES`) to allow multi-hop reasoning across codebases.
+* **Agentic Tool-Calling Execution:** Employs an autonomous multi-agent state loop that uses iterative graph traversal tools to verify code context before generating responses.
+
+---
+
+## 🧬 System Architecture & Flow
+
+[User Query]
+│
+▼
+[Agentic Router (LangGraph)]
+│
+├─► [Vector Search (Qdrant)] ──► Fetches Semantic Meaning
+│
+└─► [Graph Traversal] ──────────► Traces Class/Function Call Hierarchy
+│
+▼
+[Context Fusion Layer]
+│
+▼
+[Local LLM Inference] ──► Accurate, Non-Hallucinated Answer
+
+
+### Deep-Dive System Workflow:
+1. **Repository Ingestion:** The pipeline clones a targeted GitHub repository.
+2. **Structural Chunking:** Files are passed to `Tree-sitter` to break them into discrete, self-contained functional code elements with strict metadata headers.
+3. **Graph & Vector Construction:** Code chunks are converted to vectors for semantic searching, while references and call hierarchies map nodes into an execution graph.
+4. **Agentic Query Loop:** When an engineering question is asked, a router agent chooses whether to perform a semantic search, an explicit dependency lookup, or both, dynamically compiling the codebase context for the LLM.
+
+---
+
+## 🎛️ Tech Stack
+* **Orchestration / Agents:** LangGraph / CrewAI
+* **AST Parsing:** Tree-sitter
+* **Vector Storage:** Qdrant / Milvus (or local FAISS)
+* **Graph Network Management:** NetworkX (Python-native) or Neo4j
+* **Inference Engine:** Ollama (Running Llama 3.3 / DeepSeek-R1 locally)
+* **Backend API Framework:** FastAPI
