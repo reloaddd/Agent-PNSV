@@ -1,52 +1,131 @@
 # Agent-PNSV
-> An AST-Driven Agentic GraphRAG Pipeline for Repository-Level Code Understanding
 
-`Agent-PNSV` is an advanced repository-level code analysis tool that moves past the limitations of traditional vector-based RAG. By combining Abstract Syntax Tree (AST) parsing with a hybrid Knowledge Graph+Vector architecture, Agent-PNSV map codebases by their *relationships* and *execution structures* rather than just keyword similarity.
-
----
-
-## 💡 The Problem with Traditional Code RAG
-Traditional Retrieval-Augmented Generation treats source code like unstructured prose. Slicing source code by fixed character limits cuts structural logic in half, and semantic vector similarity frequently returns test suites or deprecated modules rather than core implementations. Furthermore, traditional RAG is blind to multi-file inheritance and call hierarchies.
-
-**Agent-PNSV solves this by treating code as a graph of interconnected dependencies.**
-
-## 🛠️ Key Innovations
-* **AST-Aware Parsing:** Leverages `Tree-sitter` to deterministically chunk code by structural boundaries (Functions, Classes, Structs).
-* **GraphRAG Architecture:** Links code blocks using relational dependencies (`CALLS`, `INHERITS_FROM`, `INCLUDES`) to allow multi-hop reasoning across codebases.
-* **Agentic Tool-Calling Execution:** Employs an autonomous multi-agent state loop that uses iterative graph traversal tools to verify code context before generating responses.
+**AST-Driven Agentic GraphRAG for Repository-Level Code Understanding**
 
 ---
 
-## 🧬 System Architecture & Flow
+## The Problem
 
-[User Query]
-│
-▼
-[Agentic Router (LangGraph)]
-│
-├─► [Vector Search (Qdrant)] ──► Fetches Semantic Meaning
-│
-└─► [Graph Traversal] ──────────► Traces Class/Function Call Hierarchy
-│
-▼
-[Context Fusion Layer]
-│
-▼
-[Local LLM Inference] ──► Accurate, Non-Hallucinated Answer
+Traditional RAG treats source code like prose.
 
+Fixed-size chunking splits functions mid-logic. Semantic similarity returns test files instead of core implementations. Multi-file inheritance and call hierarchies are invisible to vector search.
 
-### Deep-Dive System Workflow:
-1. **Repository Ingestion:** The pipeline clones a targeted GitHub repository.
-2. **Structural Chunking:** Files are passed to `Tree-sitter` to break them into discrete, self-contained functional code elements with strict metadata headers.
-3. **Graph & Vector Construction:** Code chunks are converted to vectors for semantic searching, while references and call hierarchies map nodes into an execution graph.
-4. **Agentic Query Loop:** When an engineering question is asked, a router agent chooses whether to perform a semantic search, an explicit dependency lookup, or both, dynamically compiling the codebase context for the LLM.
+The result: an LLM that sees fragments of a codebase, not its structure.
 
 ---
 
-## 🎛️ Tech Stack
-* **Orchestration / Agents:** LangGraph / CrewAI
-* **AST Parsing:** Tree-sitter
-* **Vector Storage:** Qdrant / Milvus (or local FAISS)
-* **Graph Network Management:** NetworkX (Python-native) or Neo4j
-* **Inference Engine:** Ollama (Running Llama 3.3 / DeepSeek-R1 locally)
-* **Backend API Framework:** FastAPI
+## The Solution
+
+Agent-PNSV parses code the way compilers do — by structure, not by character count.
+
+It builds a living graph of your repository where functions, classes, and modules are nodes connected by the relationships between them. When you ask a question, an autonomous agent traverses this graph to compile the exact context needed — no guessing, no irrelevant chunks.
+
+---
+
+## How It Works
+User Query
+
+↓
+
+Agentic Router
+
+↓
+
+┌─────────────────────────────────┐
+
+│                                 │
+
+Vector Search (Qdrant)     Graph Traversal
+
+Semantic meaning           Call hierarchy
+
+Inheritance chain
+
+│                                 │
+
+└──────────── Context Fusion ─────┘
+
+↓
+
+Local LLM Inference
+
+↓
+
+Accurate, Grounded Answer
+
+### Pipeline Stages
+
+**1. Repository Ingestion**
+Clones the target GitHub repository and indexes all source files for processing.
+
+**2. Structural Chunking via AST**
+Files are parsed by Tree-sitter into discrete, self-contained code elements — functions, classes, structs — each carrying strict metadata headers. No function is split mid-logic.
+
+**3. Hybrid Index Construction**
+Each code chunk is embedded for semantic search while simultaneously mapped into an execution graph using extracted relationships:
+- `CALLS` — function invocation chains
+- `INHERITS_FROM` — class hierarchies
+- `INCLUDES` — module dependencies
+
+**4. Agentic Query Loop**
+An autonomous agent decides per query whether to run semantic search, explicit dependency traversal, or both. Context is dynamically compiled from the result before being passed to the LLM.
+
+---
+
+## Key Capabilities
+
+**AST-Aware Parsing**
+Tree-sitter deterministically chunks code at structural boundaries. A function is always a complete function. A class is always a complete class.
+
+**GraphRAG Architecture**
+Relationships between code elements are first-class citizens. Multi-hop reasoning across files, inheritance chains, and call hierarchies is native to the system.
+
+**Agentic Execution**
+The query loop is not a fixed pipeline. The agent observes, decides, and iterates — using graph traversal tools to verify context before generating a response.
+
+**Local Inference**
+All LLM inference runs locally via Ollama. No data leaves your environment.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Agent Orchestration | LangGraph, CrewAI |
+| AST Parsing | Tree-sitter |
+| Vector Storage | Qdrant, Milvus, FAISS |
+| Graph Engine | NetworkX, Neo4j |
+| Local Inference | Ollama (Llama 3.3, DeepSeek-R1) |
+| API | FastAPI |
+
+---
+
+## Why This Matters
+
+| Capability | Traditional RAG | Agent-PNSV |
+|---|---|---|
+| Chunking strategy | Fixed character limit | AST structural boundaries |
+| Retrieval signal | Semantic similarity only | Semantic + graph traversal |
+| Cross-file reasoning | None | Multi-hop dependency chains |
+| Hallucination surface | High — missing context | Low — verified graph context |
+| Code structure awareness | None | Full call hierarchy |
+
+---
+
+## Use Cases
+
+- **Codebase onboarding** — understand an unfamiliar repository in minutes
+- **Dependency analysis** — trace what breaks when a function changes
+- **Architecture review** — map inheritance and module relationships
+- **Code Q&A** — ask engineering questions, get answers grounded in actual implementation
+
+---
+
+## Status
+
+Active development. Contributions welcome.
+
+---
+
+*Agent-PNSV — because code has structure. Your RAG should too.*
