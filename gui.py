@@ -1,6 +1,7 @@
 import streamlit as st
 from agent_interface import GraphRAGAgent
 import ollama
+from memory import save_chat_turn, get_chat_history, get_current_repo_name, clear_repo_history
 
 # ── Page config ────────────────────────────────────────────────────
 st.set_page_config(
@@ -90,10 +91,26 @@ except Exception as e:
     st.stop()
 
 
+# ── DYNAMIC MEMORY SYNCHRONIZATION ───────────────────────────────
+current_repo = get_current_repo_name()
+
+# If the repository flipped or hasn't loaded yet, pull dedicated history files
+if "active_repo_identity" not in st.session_state or st.session_state.active_repo_identity != current_repo:
+    st.session_state.active_repo_identity = current_repo
+    st.session_state.messages = []
+    
+    # Load persistent histories matching this repository track exclusively
+    saved_logs = get_chat_history()
+    for turn in saved_logs:
+        st.session_state.messages.append({"role": "user", "content": turn["user"]})
+        st.session_state.messages.append({"role": "assistant", "content": turn["assistant"]})
+
+
 # ── Sidebar ─────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### agent-pnsv")
     st.caption("ast-driven graphrag · local inference")
+    st.caption(f"📍 Active Repo: `{current_repo}`")
     st.divider()
 
     st.markdown("**model**")
@@ -127,6 +144,7 @@ with st.sidebar:
     st.caption("ollama · localhost:11434")
 
     if st.button("clear chat", use_container_width=True):
+        clear_repo_history()
         st.session_state.messages = []
         if "last_context" in st.session_state:
             del st.session_state.last_context
@@ -137,20 +155,16 @@ with st.sidebar:
 col1, col2 = st.columns([6, 1])
 with col1:
     st.markdown("## `agent-pnsv`")
-    st.caption("query your indexed codebase · structural code understanding · local inference")
+    st.caption(f"querying: **{current_repo}** · structural code understanding · local inference")
 
 st.divider()
 
 # ── Chat history ────────────────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
 if not st.session_state.messages:
-    st.markdown("""$ agent-pnsv --ready
-                     vector database connected
-                     awaiting query...
+    st.markdown(f"""$ agent-pnsv --ready
+                 vector database connected [{current_repo}]
+                 awaiting query...
                 """)
-
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -201,6 +215,9 @@ if user_query := st.chat_input("query codebase..."):
                 "role":    "assistant",
                 "content": response_text
             })
+            
+            # Log turn to isolated repo cache on drive
+            save_chat_turn("GUI", user_query, response_text)
 
         except Exception as e:
             if "connect" in str(e).lower():
