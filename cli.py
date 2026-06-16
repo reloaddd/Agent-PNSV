@@ -1,77 +1,90 @@
 import click
 import sys
-import time
+import ollama
 from agent_interface import GraphRAGAgent
 
-PNSV_BANNER = """
-\033[38;5;46m██████╗ ███╗   ██╗███████╗██╗   ██╗     \033[38;5;46m[ SYSTEM INITIALIZATION DETECTED ]
-\033[38;5;46m██╔══██╗████╗  ██║██╔════╝██║   ██║     \033[38;5;10m===================================
-\033[38;5;51m██████╔╝██╔██╗ ██║███████╗██║   ██║     \033[38;5;220mPNSV CORE ACTIVE // LINKING VECTORS
-\033[38;5;51m██╔═══╝ ██║╚██╗██║╚════██║╚██╗ ██╔╝     \033[38;5;244m_..""````"".._
-\033[38;5;198m██║     ██║ ╚████║███████║ ╚████╔╝    \033[38;5;242m.-'                  '-.
-\033[38;5;198m╚═╝     ╚═╝  ╚═══╝╚══════╝  ╚═══╝     \033[38;5;201m  `""--.._____..--""`
-"""
 
 @click.command()
-def main():
-    """🤖 Agent PNSV: Continuous Interactive Code Assistant Shell."""
-    # Print the custom neon cyberpunk banner layout
-    print(PNSV_BANNER)
-    click.echo(click.style("=== [⚡] WELCOME TO AGENT PNSV MATRIX DECK ===", fg="magenta", bold=True))
-    click.echo(click.style("SYSTEM RUN LEVEL: ACCESS DEEP RETRIEVAL SHELL. TYPE 'exit' TO REBOOT VIRTUAL TERMINAL.\n", fg="green", dim=True))
-    
-    click.echo(click.style("⚙️  [CONNECTING] Sifting relational database vectors...", fg="yellow"))
-    try:
-        agent = GraphRAGAgent()
-    except Exception as e:
-        click.echo(click.style(f"\n[CRITICAL ERROR] Core terminal failure: {e}", fg="red", bold=True))
-        return
+@click.option('--db', default='./pnsv_vector_db', help='Path to vector database')
+@click.option('--model', default='llama3', help='Ollama model to use')
+@click.option('--limit', default=5, help='Number of context chunks to retrieve')
+@click.option('--verbose', is_flag=True, help='Show retrieved context blocks')
+def main(db, model, limit, verbose):
+    """Agent-PNSV — AST-driven GraphRAG code intelligence shell.
 
-    click.echo(click.style("🔑 [LINK ESTABLISHED] Storage clusters locked in memory memory.\n", fg="green", bold=True))
+    Interactive shell for querying indexed codebases using structural
+    code understanding. Requires Ollama running locally.
+
+    \b
+    Commands:
+      exit, quit, q    Exit the shell
+      Ctrl+C           Interrupt and exit
+    """
+    click.echo(f"agent-pnsv v0.1.0  |  db: {db}  |  model: {model}")
+    click.echo("─" * 60)
+
+    try:
+        agent = GraphRAGAgent(db_path=db)
+    except Exception as e:
+        click.echo(f"error: failed to initialize agent — {e}", err=True)
+        sys.exit(1)
+
+    click.echo("ready.\n")
 
     while True:
         try:
-            # Custom terminal loop indicator sequence
-            query = click.prompt(click.style("┌───(cyber-root㉿pnsv-agent)-[~]\n└─$ ", fg="red", bold=True), prompt_suffix="")
+            query = click.prompt("pnsv", prompt_suffix=" > ")
         except (KeyboardInterrupt, EOFError):
-            click.echo(click.style("\n\n[🛑] Disconnecting node safely. Goodbye operator.", fg="yellow"))
+            click.echo("\nexiting.")
             sys.exit(0)
-        
-        query_clean = query.strip().lower()
-        if query_clean in ['exit', 'quit', 'q']:
-            click.echo(click.style("\n[🛑] Terminal core killed safely. Goodbye operator.\n", fg="yellow"))
-            sys.exit(0)
-            
-        if not query.strip():
+
+        query = query.strip()
+
+        if not query:
             continue
-            
-        click.echo(click.style("✨ [COMPUTING] Mapping syntax trees & context boundaries...", fg="magenta"))
-        
+
+        if query.lower() in ('exit', 'quit', 'q'):
+            click.echo("exiting.")
+            sys.exit(0)
+
+        # retrieve context
         try:
-            context, full_prompt = agent.generate_prompt(query)
-            
-            # Print the data boundary blocks
-            print(click.style("\n📥 [EXTRACTED MATRIX BLOCK]", fg="cyan", bold=True))
-            print(click.style("-" * 50, fg="cyan"))
-            print(click.style(context, fg="white", dim=True))
-            print(click.style("-" * 50, fg="cyan"))
-            
-            import ollama
-            click.echo(click.style("🧠 [DEEP THINKING] Fetching token matrices from Llama3 core...", fg="yellow"))
-            print(click.style("🤖 RESPONSE_STREAM >> ", fg="green", bold=True), end="", flush=True)
-            
-            # Real-time character streaming pipeline
-            stream = ollama.generate(model='llama3', prompt=full_prompt, stream=True)
-            for chunk in stream:
-                print(click.style(chunk['response'], fg="green"), end="", flush=True)
-            print("\n")
-            
+            results, context = agent.retrieve_context(query, limit=limit)
         except Exception as e:
-            # Check if ollama connection specifically failed
-            if "ConnectionRefusedError" in str(e) or "Failed to connect" in str(e):
-                click.echo(click.style("\n⚠️  [DAEMON OFFLINE] Local Ollama backend core did not respond.", fg="red", bold=True))
+            click.echo(f"error: retrieval failed — {e}", err=True)
+            continue
+
+        if results is None:
+            click.echo("no matching context found in indexed codebase.")
+            continue
+
+        # show context blocks if verbose
+        if verbose:
+            click.echo("\n── retrieved context ─────────────────────────────────")
+            click.echo(context)
+            click.echo("──────────────────────────────────────────────────────\n")
+
+        # build prompt
+        _, full_prompt = agent.generate_prompt(query)
+
+        # run inference
+        try:
+            stream = ollama.generate(model=model, prompt=full_prompt, stream=True)
+
+            click.echo()  # newline before response
+            for chunk in stream:
+                click.echo(
+                    click.style(chunk['response'], fg=(0, 255, 70)),
+                    nl=False
+                )
+            click.echo("\n")
+
+        except Exception as e:
+            if "connect" in str(e).lower():
+                click.echo("error: ollama is not running. start with: ollama serve", err=True)
             else:
-                click.echo(click.style(f"\n❌ [EXECUTION FAULT] Pipeline exception triggered: {e}", fg="red"))
+                click.echo(f"error: inference failed — {e}", err=True)
+
 
 if __name__ == "__main__":
     main()

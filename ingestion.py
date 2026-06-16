@@ -11,6 +11,7 @@ import re
 import chromadb
 from chromadb.utils import embedding_functions
 
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 
 
 class WorkspaceManager:
@@ -168,22 +169,21 @@ class CodeGraphMapper:
     """
     def __init__(self, chunks: list):
         self.chunks = chunks
-        # Create a fast lookup set of all valid function/class names in the repo
+        
         self.valid_targets = self._build_target_lookup()
 
     def _build_target_lookup(self) -> dict:
         """Maps out names to their full structural chunk data for quick matching."""
         lookup = {}
         for chunk in self.chunks:
-            # We need to extract the actual name identifier of the function or class
-            # Let's look at the first line of the code block to find its name
+            
             first_line = chunk["code"].splitlines()[0] if chunk["code"] else ""
             
-            # Simple regex search to capture the name after 'def' or 'class'
+            #capture the name after 'def' or 'class'
             match = re.search(r'(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)', first_line)
             if match:
                 name = match.group(1)
-                chunk["name"] = name  # Enrich our chunk packet with its identity name
+                chunk["name"] = name  
                 lookup[name] = chunk
             else:
                 chunk["name"] = "unknown"
@@ -198,16 +198,15 @@ class CodeGraphMapper:
             if source_name == "unknown":
                 continue
 
-            # Look at the raw code body line-by-line
+           
             code_body = source_chunk["code"]
 
-            # 1. Search for CALLS relationships
+            
             for target_name, target_chunk in self.valid_targets.items():
                 if source_name == target_name:
-                    continue # Skip self-referential tracking
+                    continue 
                 
-                # Check if the target function name is invoked as a token inside this code block
-                # Using word boundaries (\b) ensures we don't accidentally match substrings
+                
                 if re.search(r'\b' + re.escape(target_name) + r'\b\(', code_body):
                     edges.append({
                         "source": source_name,
@@ -222,7 +221,7 @@ class CodeGraphMapper:
             # 2. Search for INHERITS_FROM relationships (For Class Definitions)
             if source_chunk["node_type"] == "class_definition":
                 first_line = code_body.splitlines()[0]
-                # Regex looking for inheritance syntax: class MyClass(BaseClass):
+                
                 inheritance_match = re.search(r'class\s+\w+\(([^)]+)\)', first_line)
                 if inheritance_match:
                     parents = [p.strip() for p in inheritance_match.group(1).split(",")]
@@ -246,16 +245,15 @@ class VectorStorageEngine:
     def __init__(self, db_path: str = "./pnsv_vector_db"):
         self.db_path = db_path
         
-        # 1. Spin up a persistent local database directory on disk
+       
         self.client = chromadb.PersistentClient(path=self.db_path)
         
-        # 2. Load a high-quality, local open-source embedding transformer model
-        # This converts code characters into mathematical arrays with 384 dimensions
+        
         self.embedding_model = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
         
-        # 3. Create or pull an existing structural code segment collection
+        
         self.collection = self.client.get_or_create_collection(
             name="codebase_structures",
             embedding_function=self.embedding_model
@@ -274,13 +272,13 @@ class VectorStorageEngine:
         metadatas = []
 
         for idx, chunk in enumerate(chunks):
-            # Create a unique structural string identifier for each chunk node
+            
             chunk_id = f"chunk_{os.path.basename(chunk['file_path'])}_{chunk['start_line']}_{idx}"
             
             ids.append(chunk_id)
-            documents.append(chunk["code"]) # The raw code string is what gets vectorized
+            documents.append(chunk["code"]) # string  gets vectorized
             
-            # Metadata must be simple primitives (strings, ints, floats) for database querying
+            #  (strings, ints, floats) for database querying
             metadatas.append({
                 "file_path": chunk["file_path"],
                 "node_type": chunk["node_type"],
@@ -289,7 +287,7 @@ class VectorStorageEngine:
                 "identity_name": chunk.get("name", "unknown")
             })
 
-        # Batch upload our payloads into our persistent Chroma collection
+        
         self.collection.add(
             ids=ids,
             documents=documents,
@@ -312,7 +310,7 @@ if __name__ == "__main__":
     #TEST_REPO="https://github.com/pallets/click"
     #TEST_REPO="https://github.com/reloaddd/Agent-Kiro"
 
-    TEST_REPO = input("Enter GitHub Repository URL: ").strip()
+    TEST_REPO = "https://github.com/coleifer/peewee"
 
     manager=WorkspaceManager()
     chunker=ASTChunker()

@@ -1,13 +1,83 @@
 import streamlit as st
-import os
 from agent_interface import GraphRAGAgent
+import ollama
 
-# 1. Page Configuration and Styling
-st.set_page_config(page_title="Agent PNSV Dashboard", page_icon="🤖", layout="wide")
-st.title("🤖 Agent PNSV - GraphRAG Workspace")
-st.caption("Inspect abstract syntax trees, relational maps, and chat with your codebase locally.")
+# ── Page config ────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Agent PNSV",
+    page_icon="⬡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# 2. Initialize our core backend agent
+# ── Minimal styling ─────────────────────────────────────────────────
+st.markdown("""
+<style>
+    /* hide streamlit branding */
+    #MainMenu, footer, header { visibility: hidden; }
+
+    /* font */
+    html, body, [class*="css"] {
+        font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+    }
+
+    /* background */
+    .stApp { background-color: #0d1117; }
+
+    /* sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #161b22;
+        border-right: 1px solid #21262d;
+    }
+
+    /* chat messages */
+    .stChatMessage {
+        background-color: #161b22 !important;
+        border: 1px solid #21262d;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
+
+    /* input */
+    .stChatInputContainer {
+        border-top: 1px solid #21262d;
+        background-color: #0d1117;
+    }
+
+    textarea, .stTextArea textarea {
+        background-color: #161b22 !important;
+        color: #8b949e !important;
+        border: 1px solid #21262d !important;
+        font-family: "JetBrains Mono", monospace !important;
+        font-size: 12px !important;
+    }
+
+    /* text colors */
+    .stMarkdown, p, li { color: #c9d1d9; }
+    h1, h2, h3 { color: #f0f6fc; font-weight: 500; }
+    .stCaption { color: #8b949e; }
+
+    /* code blocks */
+    code {
+        background-color: #161b22;
+        color: #79c0ff;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+
+    /* spinner */
+    .stSpinner { color: #58a6ff; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #21262d; border-radius: 3px; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ── Agent init ──────────────────────────────────────────────────────
 @st.cache_resource
 def load_agent():
     return GraphRAGAgent()
@@ -15,55 +85,125 @@ def load_agent():
 try:
     agent = load_agent()
 except Exception as e:
-    st.error(f"Could not connect to vector database. Did you run ingestion.py first? Error: {e}")
+    st.error(f"failed to connect to vector database — {e}")
+    st.caption("run ingestion.py first to index a repository.")
     st.stop()
 
-# 3. Main Chat Interface Setup
+
+# ── Sidebar ─────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### agent-pnsv")
+    st.caption("ast-driven graphrag · local inference")
+    st.divider()
+
+    st.markdown("**model**")
+    model = st.selectbox(
+        "model",
+        ["llama3", "llama3.2", "deepseek-r1", "codellama"],
+        label_visibility="collapsed"
+    )
+
+    st.markdown("**context limit**")
+    limit = st.slider("limit", min_value=1, max_value=10, value=5, label_visibility="collapsed")
+
+    st.markdown("**verbose**")
+    show_context = st.toggle("show retrieved chunks", value=True)
+
+    st.divider()
+
+    # context panel — shown after query
+    if "last_context" in st.session_state and show_context:
+        st.markdown("**retrieved context**")
+        st.text_area(
+            "context",
+            value=st.session_state.last_context,
+            height=400,
+            disabled=True,
+            label_visibility="collapsed"
+        )
+
+    st.divider()
+    st.caption("db · ./pnsv_vector_db")
+    st.caption("ollama · localhost:11434")
+
+    if st.button("clear chat", use_container_width=True):
+        st.session_state.messages = []
+        if "last_context" in st.session_state:
+            del st.session_state.last_context
+        st.rerun()
+
+
+# ── Main area ───────────────────────────────────────────────────────
+col1, col2 = st.columns([6, 1])
+with col1:
+    st.markdown("## `agent-pnsv`")
+    st.caption("query your indexed codebase · structural code understanding · local inference")
+
+st.divider()
+
+# ── Chat history ────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display ongoing chat history
+if not st.session_state.messages:
+    st.markdown("""$ agent-pnsv --ready
+                     vector database connected
+                     awaiting query...
+                """)
+
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 4. Capture User Inputs
-if user_query := st.chat_input("Ask a question about your cloned repository..."):
-    # Display user question
-    st.chat_message("user").write(user_query)
+
+# ── Chat input ──────────────────────────────────────────────────────
+if user_query := st.chat_input("query codebase..."):
+
     st.session_state.messages.append({"role": "user", "content": user_query})
-    
-    # Extract Context and Search Vectors
-    with st.spinner("Extracting deep structural context matrix..."):
-        context, complete_llm_prompt = agent.generate_prompt(user_query)
+    with st.chat_message("user"):
+        st.markdown(user_query)
 
-    # 5. Render retrieved Context in a clean Sidebar panel
-    with st.sidebar:
-        st.header("📍 Retrieved AST Chunks")
-        st.markdown("These exact structural code blocks were extracted to guide the AI's generation:")
-        st.text_area(label="Context Window Payload", value=context, height=500, disabled=True)
+    # retrieve context
+    with st.spinner("traversing syntax trees..."):
+        try:
+            results, context = agent.retrieve_context(user_query, limit=limit)
+            _, full_prompt   = agent.generate_prompt(user_query)
+        except Exception as e:
+            st.error(f"retrieval error — {e}")
+            st.stop()
 
-    # 6. Route Payload to LLM Layer with Real-Time Streaming
+    if results is None:
+        st.warning("no matching context found in indexed codebase.")
+        st.stop()
+
+    # store context for sidebar
+    st.session_state.last_context = context
+
+    # stream response
     with st.chat_message("assistant"):
         try:
-            import ollama
-            response_placeholder = st.empty()
-            full_ai_stream_text = ""
-            
-            # Request token streaming execution from local model core
-            stream = ollama.generate(model='llama3', prompt=complete_llm_prompt, stream=True)
-            
+            placeholder   = st.empty()
+            response_text = ""
+
+            stream = ollama.generate(
+                model=model,
+                prompt=full_prompt,
+                stream=True
+            )
+
             for chunk in stream:
-                full_ai_stream_text += chunk['response']
-                # Render the current accumulated text alongside a blinking terminal block cursor
-                response_placeholder.markdown(full_ai_stream_text + " █")
-            
-            # Clean render without cursor once stream completes
-            response_placeholder.markdown(full_ai_stream_text)
-            st.session_state.messages.append({"role": "assistant", "content": full_ai_stream_text})
-            
-        except Exception:
-            # Fallback if Ollama service isn't turned on
-            st.warning("⚠️ Local Ollama core service is offline.")
-            st.markdown("Here is the compiled prompt data package ready for cloud execution:")
-            st.code(complete_llm_prompt, language="markdown")
+                response_text += chunk['response']
+                placeholder.markdown(response_text + "▌")
+
+            placeholder.markdown(response_text)
+            st.session_state.messages.append({
+                "role":    "assistant",
+                "content": response_text
+            })
+
+        except Exception as e:
+            if "connect" in str(e).lower():
+                st.error("ollama is not running — start with: `ollama serve`")
+            else:
+                st.error(f"inference error — {e}")
